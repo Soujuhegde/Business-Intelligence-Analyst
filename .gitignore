@@ -3,35 +3,48 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
+*.pdb
+*.egg
 *.egg-info/
 dist/
 build/
-*.egg
+*.so
 
-# Virtual Environment
+# Virtual environments
 venv/
 .venv/
 env/
+ENV/
 
 # Environment variables
 .env
 
-# Database
-data/bizintel.db
-data/uploads/
-data/*.db
-data/*.pdf
+# Database files
+*.db
+*.sqlite
+*.sqlite3
 
-# Jupyter
-.ipynb_checkpoints/
+# Data uploads (large files)
+data/uploads/
+data/*.pdf
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
+
+# Streamlit
+.streamlit/
+
+# Docker
+*.override.yml

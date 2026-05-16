@@ -132,7 +132,7 @@ footer { visibility: hidden !important; }
 }
 
 /* Inputs and Controls */
-.stTextInput > div > div > input, .stTextArea > div > div > textarea, .stChatInput > div {
+.stTextInput > div > div > input, .stTextArea > div > div > textarea {
     background-color: #FFFFFF !important;
     border: 2px solid #E2E8F0 !important;
     color: #000000 !important;
@@ -142,9 +142,73 @@ footer { visibility: hidden !important; }
     font-weight: 500 !important;
     transition: all 0.2s ease !important;
 }
-.stTextInput > div > div > input:focus, .stChatInput > div:focus-within {
+.stTextInput > div > div > input:focus {
     border-color: #00FF66 !important;
     box-shadow: 0 0 0 4px rgba(0, 255, 102, 0.2) !important;
+}
+
+/* ── Chat Input — full white override ── */
+/* Bottom fixed bar background */
+[data-testid="stBottom"] {
+    background: #FFFFFF !important;
+    border-top: 1px solid #E2E8F0 !important;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.04) !important;
+    padding: 12px 0 !important;
+}
+[data-testid="stBottom"] > div {
+    background: #FFFFFF !important;
+}
+/* Outer chat input wrapper */
+[data-testid="stChatInput"] {
+    background: #FFFFFF !important;
+    border: 2px solid #E2E8F0 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06) !important;
+    transition: all 0.25s ease !important;
+    overflow: hidden !important;
+}
+[data-testid="stChatInput"]:focus-within {
+    border-color: #00FF66 !important;
+    box-shadow: 0 0 0 4px rgba(0,255,102,0.18), 0 4px 24px rgba(0,0,0,0.06) !important;
+}
+/* The actual textarea inside chat input */
+[data-testid="stChatInput"] textarea {
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
+    border: none !important;
+    outline: none !important;
+    caret-color: #00FF66 !important;
+}
+[data-testid="stChatInput"] textarea::placeholder {
+    color: #94A3B8 !important;
+    font-weight: 500 !important;
+}
+/* Send button inside chat input */
+[data-testid="stChatInput"] button {
+    background: #000000 !important;
+    color: #00FF66 !important;
+    border: none !important;
+    border-radius: 10px !important;
+    width: 38px !important;
+    height: 38px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    margin: 4px !important;
+}
+[data-testid="stChatInput"] button:hover {
+    background: #00FF66 !important;
+    color: #000000 !important;
+    transform: scale(1.08) !important;
+    box-shadow: 0 4px 16px rgba(0,255,102,0.4) !important;
+}
+[data-testid="stChatInput"] button svg {
+    fill: currentColor !important;
 }
 
 /* Neon Green Buttons */
@@ -313,12 +377,50 @@ def fmt_currency(val):
     return f"${val:.2f}"
 
 def api_get(endpoint):
+    """Returns (data_dict, error_type). error_type is None on success,
+    'no_data' for HTTP 404, 'offline' if backend is unreachable."""
     try:
         r = requests.get(f"{API_URL}{endpoint}", timeout=30)
+        if r.status_code == 404:
+            return None, "no_data"
         r.raise_for_status()
-        return r.json()
-    except:
-        return None
+        return r.json(), None
+    except requests.exceptions.ConnectionError:
+        return None, "offline"
+    except Exception:
+        return None, "error"
+
+def _no_data_banner(page_name="this page"):
+    """Renders a styled empty-state card prompting the user to upload data."""
+    st.markdown(f'''
+    <div style="
+        background: #FFFFFF;
+        border: 2px dashed #CBD5E1;
+        border-radius: 20px;
+        padding: 64px 40px;
+        text-align: center;
+        margin-top: 24px;
+    ">
+        <div style="font-size: 52px; margin-bottom: 20px;">📂</div>
+        <div style="font-size: 22px; font-weight: 800; color: #0F172A; margin-bottom: 10px;">No Data Loaded</div>
+        <div style="font-size: 15px; color: #64748B; max-width: 420px; margin: 0 auto 28px; line-height: 1.6;">
+            {page_name} requires a dataset. Upload a CSV file via the
+            <b style="color:#00D859;">Data Upload</b> page to get started.
+        </div>
+        <div style="
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: #000000;
+            color: #00FF66;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 12px 28px;
+            border-radius: 10px;
+            box-shadow: 0 4px 14px rgba(0,255,102,0.3);
+        ">⚡ Go to Data Upload → switch from the sidebar</div>
+    </div>
+    ''', unsafe_allow_html=True)
 
 def api_post(endpoint, data=None, files=None):
     try:
@@ -328,7 +430,10 @@ def api_post(endpoint, data=None, files=None):
             r = requests.post(f"{API_URL}{endpoint}", json=data, timeout=60)
         r.raise_for_status()
         return r.json()
-    except:
+    except requests.exceptions.ConnectionError:
+        st.error("⚠️ Backend is offline. Start the backend server and refresh.")
+        return None
+    except Exception:
         return None
 
 def style_fig(fig):
@@ -487,9 +592,13 @@ elif page == "Dashboard":
     st.markdown('<div class="startup-subtitle">Real-time telemetry and financial intelligence.</div>', unsafe_allow_html=True)
 
     with st.spinner("Fetching live metrics..."):
-        data = api_get("/dashboard")
+        data, err = api_get("/dashboard")
 
-    if data:
+    if err == "offline":
+        st.error("⚠️ Backend is offline. Please start the backend server.")
+    elif err == "no_data":
+        _no_data_banner("The Dashboard")
+    elif data:
         kpis   = data.get("kpis", {})
         charts = data.get("charts", {})
 
@@ -559,56 +668,211 @@ elif page == "Dashboard":
 # PAGE 3 — AI Chat
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "AI Copilot":
-    st.markdown('<div class="startup-title">AI Copilot</div>', unsafe_allow_html=True)
-    st.markdown('<div class="startup-subtitle">Interact with your data warehouse via advanced LLM synthesis.</div>', unsafe_allow_html=True)
 
+    # ── Extra CSS for Copilot page ─────────────────────────────────────────────
+    st.markdown("""
+    <style>
+    .copilot-hero { text-align:center; padding:36px 20px 28px; }
+    .copilot-hero-icon {
+        width:72px; height:72px; background:#000;
+        border-radius:20px; display:inline-flex;
+        align-items:center; justify-content:center;
+        font-size:32px; margin-bottom:18px;
+        box-shadow:0 8px 32px rgba(0,255,102,0.35);
+    }
+    .copilot-hero h2 {
+        font-size:26px; font-weight:800; color:#0F172A;
+        margin:0 0 10px; letter-spacing:-0.03em;
+    }
+    .copilot-hero p {
+        font-size:15px; color:#64748B;
+        max-width:440px; margin:0 auto; line-height:1.65;
+    }
+    .qa-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:24px 0 4px; }
+    .qa-card {
+        background:#FFFFFF; border:1.5px solid #E2E8F0;
+        border-radius:14px; padding:16px 14px;
+        transition:all 0.25s ease;
+    }
+    .qa-card:hover { border-color:#00FF66; box-shadow:0 8px 20px rgba(0,255,102,0.15); transform:translateY(-2px); }
+    .qa-icon { font-size:20px; margin-bottom:8px; }
+    .qa-title { font-size:13px; font-weight:700; color:#0F172A; margin-bottom:3px; }
+    .qa-desc  { font-size:11px; color:#94A3B8; line-height:1.4; }
+    .db-badge {
+        display:inline-flex; align-items:center; gap:7px;
+        background:#F0FFF6; border:1.5px solid #86EFAC;
+        color:#16A34A; font-size:12px; font-weight:700;
+        padding:5px 12px; border-radius:20px; margin-bottom:14px;
+    }
+    .db-dot { width:7px; height:7px; background:#00FF66; border-radius:50%; box-shadow:0 0 6px #00FF66; }
+    .chat-wrap { display:flex; flex-direction:column; gap:18px; margin:4px 0 20px; }
+    .msg-row { display:flex; gap:12px; align-items:flex-start; }
+    .msg-row.user-row { flex-direction:row-reverse; }
+    .msg-av {
+        width:34px; height:34px; border-radius:10px; flex-shrink:0;
+        display:flex; align-items:center; justify-content:center;
+        font-size:14px; font-weight:700;
+    }
+    .msg-av.u { background:#F1F5F9; color:#0F172A; border:1.5px solid #E2E8F0; }
+    .msg-av.a { background:#000; color:#00FF66; box-shadow:0 4px 12px rgba(0,255,102,0.3); }
+    .msg-bubble {
+        max-width:72%; padding:13px 17px; font-size:15px; line-height:1.65;
+        border-radius:16px;
+    }
+    .msg-bubble.u-b {
+        background:#F1F5F9; color:#0F172A;
+        border:1.5px solid #E2E8F0; border-bottom-right-radius:4px;
+    }
+    .msg-bubble.a-b {
+        background:#FFFFFF; color:#1E293B;
+        border:1.5px solid #E2E8F0; border-bottom-left-radius:4px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.04);
+    }
+    .msg-meta { font-size:11px; color:#94A3B8; margin-top:4px; padding:0 2px; font-weight:600; }
+    .meta-right { text-align:right; }
+    .thinking {
+        display:flex; align-items:center; gap:10px; padding:10px 0;
+    }
+    .dots { display:flex; gap:5px; }
+    .dots span {
+        width:8px; height:8px; background:#00FF66; border-radius:50%;
+        animation:tdot 1.2s infinite ease-in-out;
+    }
+    .dots span:nth-child(2){ animation-delay:.2s; }
+    .dots span:nth-child(3){ animation-delay:.4s; }
+    @keyframes tdot {
+        0%,80%,100%{ transform:translateY(0); }
+        40%{ transform:translateY(-7px); }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Page header + clear button ─────────────────────────────────────────────
+    h_col, btn_col = st.columns([5, 1])
+    with h_col:
+        st.markdown('<div class="startup-title">AI Copilot</div>', unsafe_allow_html=True)
+        st.markdown('<div class="startup-subtitle">Ask questions in plain English — powered by Groq LLM + live SQL intelligence.</div>', unsafe_allow_html=True)
+    with btn_col:
+        st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
+        if st.button("🗑 Clear", key="clear_chat", type="secondary", use_container_width=True):
+            st.session_state.chat_history = []
+            st.rerun()
+
+    # Dataset connected badge
+    st.markdown('<div class="db-badge"><div class="db-dot"></div>Connected · Superstore Sales DB · 9,994 rows</div>', unsafe_allow_html=True)
+
+    # ── Session state ──────────────────────────────────────────────────────────
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
+    # ── Welcome hero + quick-action cards (empty state) ────────────────────────
     if not st.session_state.chat_history:
-        st.markdown("<div style='font-size:14px;color:#64748B;margin-bottom:12px;font-weight:700;text-transform:uppercase;'>Quick Actions</div>", unsafe_allow_html=True)
-        examples = ["Analyze Q3 revenue drop", "Show highest margin region", "Identify top 5 customers"]
-        cols = st.columns(len(examples))
-        for i, ex in enumerate(examples):
-            if cols[i].button(ex, key=f"ex_{i}", use_container_width=True, type="secondary"):
-                st.session_state["prefill"] = ex
+        st.markdown("""
+        <div class="copilot-hero">
+            <div class="copilot-hero-icon">⚡</div>
+            <h2>What do you want to know?</h2>
+            <p>Ask me anything about your data — revenue trends, top products,
+               customer segments, regional performance, and more.</p>
+        </div>
+        <div class="qa-grid">
+            <div class="qa-card"><div class="qa-icon">📉</div>
+                <div class="qa-title">Revenue Drop</div>
+                <div class="qa-desc">Why did Q3 revenue decline vs Q2?</div></div>
+            <div class="qa-card"><div class="qa-icon">🏆</div>
+                <div class="qa-title">Top Margin Region</div>
+                <div class="qa-desc">Which region has the highest profit margin?</div></div>
+            <div class="qa-card"><div class="qa-icon">👥</div>
+                <div class="qa-title">Top Customers</div>
+                <div class="qa-desc">Who are the top 5 customers by total spend?</div></div>
+            <div class="qa-card"><div class="qa-icon">📦</div>
+                <div class="qa-title">Best Products</div>
+                <div class="qa-desc">Top 10 products by revenue this year.</div></div>
+            <div class="qa-card"><div class="qa-icon">🌍</div>
+                <div class="qa-title">Regional Breakdown</div>
+                <div class="qa-desc">Compare sales across all regions.</div></div>
+            <div class="qa-card"><div class="qa-icon">📅</div>
+                <div class="qa-title">Monthly Trend</div>
+                <div class="qa-desc">Month-over-month revenue performance.</div></div>
+        </div>
+        """, unsafe_allow_html=True)
 
+        # Clickable quick-action buttons below the visual cards
+        quick = [
+            "Why did Q3 revenue decline vs Q2?",
+            "Which region has the highest profit margin?",
+            "Who are the top 5 customers by total spend?",
+            "What are the top 10 products by revenue?",
+            "Compare sales performance across all regions.",
+            "Show me the month-over-month revenue trend.",
+        ]
+        cols6 = st.columns(3)
+        for i, q_text in enumerate(quick):
+            with cols6[i % 3]:
+                if st.button("Ask →", key=f"qa_{i}", use_container_width=True, type="secondary"):
+                    st.session_state["prefill"] = q_text
+                    st.rerun()
+
+    # ── Render chat history ────────────────────────────────────────────────────
     if st.session_state.chat_history:
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+        st.markdown('<div class="chat-wrap">', unsafe_allow_html=True)
         for msg in st.session_state.chat_history:
             if msg["role"] == "user":
-                st.markdown(f'''
-                <div class="chat-row">
-                    <div class="chat-avatar user">U</div>
-                    <div class="chat-content">{msg["content"]}</div>
+                st.markdown(f"""
+                <div class="msg-row user-row">
+                    <div class="msg-av u">U</div>
+                    <div>
+                        <div class="msg-bubble u-b">{msg["content"]}</div>
+                        <div class="msg-meta meta-right">You</div>
+                    </div>
                 </div>
-                ''', unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
             else:
-                st.markdown(f'''
-                <div class="chat-row">
-                    <div class="chat-avatar ai">⚡</div>
-                    <div class="chat-content">{msg["content"]}</div>
+                st.markdown(f"""
+                <div class="msg-row">
+                    <div class="msg-av a">⚡</div>
+                    <div>
+                        <div class="msg-bubble a-b">{msg["content"]}</div>
+                        <div class="msg-meta">Clarity AI</div>
+                    </div>
                 </div>
-                ''', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    prefill = st.session_state.pop("prefill", "")
-    question = st.chat_input("Ask your Copilot...")
+    # ── Chat input ─────────────────────────────────────────────────────────────
+    prefill  = st.session_state.pop("prefill", "")
+    question = st.chat_input("Ask your Copilot anything about the data...")
 
     if question or prefill:
         q = question or prefill
         st.session_state.chat_history.append({"role": "user", "content": q})
         st.rerun()
 
+    # ── Fetch AI response ──────────────────────────────────────────────────────
     if st.session_state.chat_history and st.session_state.chat_history[-1]["role"] == "user":
         q = st.session_state.chat_history[-1]["content"]
-        with st.spinner("Synthesizing..."):
-            result = api_post("/query", data={"question": q})
+
+        thinking_slot = st.empty()
+        thinking_slot.markdown("""
+        <div class="thinking">
+            <div class="msg-av a" style="width:34px;height:34px;border-radius:10px;display:inline-flex;
+                 align-items:center;justify-content:center;background:#000;color:#00FF66;font-size:14px;font-weight:700;">⚡</div>
+            <div class="dots"><span></span><span></span><span></span></div>
+            <span style="font-size:13px;color:#94A3B8;font-weight:600;">Clarity AI is thinking...</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        result = api_post("/query", data={"question": q})
+        thinking_slot.empty()
 
         if result:
-            answer = result.get("answer", "Analysis failed.")
-            st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            st.rerun()
+            answer = result.get("answer", "I couldn't process that query.")
+        else:
+            answer = "⚠️ I couldn't reach the backend. Please ensure the API server is running."
+
+        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+        st.rerun()
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -627,9 +891,13 @@ elif page == "Forecast":
 
     if run_btn:
         with st.spinner("Training predictive models..."):
-            data = api_get(f"/forecast?days={days}")
+            data, err = api_get(f"/forecast?days={days}")
 
-        if data:
+        if err == "offline":
+            st.error("⚠️ Backend is offline. Please start the backend server.")
+        elif err == "no_data":
+            _no_data_banner("The Forecast Engine")
+        elif data:
             summary = data.get("summary", {})
 
             st.markdown(f'''
@@ -673,9 +941,13 @@ elif page == "Anomalies":
 
     if st.button("Initiate Deep Scan", type="primary"):
         with st.spinner("Scanning vectors..."):
-            data = api_get("/anomalies")
+            data, err = api_get("/anomalies")
 
-        if data:
+        if err == "offline":
+            st.error("⚠️ Backend is offline. Please start the backend server.")
+        elif err == "no_data":
+            _no_data_banner("The Anomaly Scanner")
+        elif data:
             st.markdown(f'''
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 32px;">
                 <div class="premium-card">
