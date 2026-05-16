@@ -5,7 +5,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/bizintel.db")
+# Resolve DB path relative to this file so it works from any CWD
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_THIS_DIR)  # one level up from backend/
+_DEFAULT_DB = f"sqlite:///{os.path.join(_PROJECT_ROOT, 'data', 'bizintel.db')}"
+
+DATABASE_URL = os.getenv("DATABASE_URL", _DEFAULT_DB)
+# If the env value still uses a relative path, make it absolute
+if DATABASE_URL.startswith("sqlite:///./"):
+    rel_path = DATABASE_URL[len("sqlite:///./"):]
+    DATABASE_URL = f"sqlite:///{os.path.join(_PROJECT_ROOT, rel_path)}"
+
+os.makedirs(os.path.join(_PROJECT_ROOT, "data"), exist_ok=True)
+
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 

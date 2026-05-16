@@ -3,152 +3,306 @@ import requests
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import json
 from datetime import datetime
+
+try:
+    from streamlit_option_menu import option_menu
+    HAS_OPTION_MENU = True
+except ImportError:
+    HAS_OPTION_MENU = False
 
 # ── Config ────────────────────────────────────────────────────────────────────
 API_URL = "http://localhost:8000"
 
 st.set_page_config(
-    page_title="AI Business Intelligence Analyst",
-    page_icon="📊",
+    page_title="Clarity AI",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── Custom CSS ─────────────────────────────────────────────────────────────────
+# ── White & Neon Green Theme ──────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-/* Global */
-html, body, [class*="css"] {
-    font-family: 'Space Grotesk', sans-serif;
+/* Global Reset */
+html, body, [class*="css"], .stApp {
+    font-family: 'Inter', -apple-system, sans-serif !important;
+    color: #334155 !important; /* Slate 700 */
+    background-color: #FFFFFF !important;
 }
 
-/* Hide default streamlit header */
-#MainMenu, footer, header { visibility: hidden; }
+/* Pure White Background with Subtle Neon Green Glows */
+.stApp {
+    background-image: 
+        radial-gradient(circle at 85% 0%, rgba(0, 255, 102, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 15% 100%, rgba(0, 255, 102, 0.05) 0%, transparent 40%);
+    background-attachment: fixed;
+}
 
-/* Sidebar */
+/* Hide Streamlit Cruft */
+header { visibility: hidden !important; }
+footer { visibility: hidden !important; }
+
+/* Crisp Light Sidebar */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 100%);
-    border-right: 1px solid #2d2d4e;
+    background: #F8FAFC !important; /* Slate 50 */
+    border-right: 1px solid #E2E8F0 !important;
+    min-width: 260px !important;
+    max-width: 260px !important;
 }
-[data-testid="stSidebar"] * { color: #e0e0f0 !important; }
 
-/* Main background */
-.stApp { background: #0a0a14; color: #e0e0f0; }
+/* Remove Unnecessary Empty Spaces */
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 2rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    max-width: 1400px !important;
+}
 
-/* KPI Cards */
-.kpi-card {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 1px solid #2d2d4e;
+/* Modern Typography Hierarchy */
+.startup-title {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    color: #000000; 
+    margin-bottom: 4px;
+    line-height: 1.2;
+}
+.startup-subtitle {
+    font-size: 16px;
+    color: #64748B; /* Slate 500 */
+    margin-bottom: 32px;
+    font-weight: 500;
+}
+
+/* Clean White Cards */
+.premium-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
     border-radius: 16px;
     padding: 24px;
-    text-align: center;
-    transition: transform 0.2s, border-color 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
 }
-.kpi-card:hover {
-    transform: translateY(-3px);
-    border-color: #7c6af7;
-}
-.kpi-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #7c6af7;
-    font-family: 'JetBrains Mono', monospace;
-}
-.kpi-label {
-    font-size: 0.85rem;
-    color: #8888aa;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-top: 6px;
+.premium-card:hover {
+    border-color: #00FF66; /* Neon Green */
+    box-shadow: 0 12px 30px rgba(0, 255, 102, 0.15);
+    transform: translateY(-4px);
 }
 
-/* Chat bubbles */
-.chat-user {
-    background: linear-gradient(135deg, #7c6af7, #5b4fcf);
-    color: white;
-    padding: 14px 18px;
-    border-radius: 18px 18px 4px 18px;
-    margin: 8px 0;
-    max-width: 80%;
-    margin-left: auto;
-    font-size: 0.95rem;
-}
-.chat-ai {
-    background: linear-gradient(135deg, #1e1e36, #2a2a4a);
-    border: 1px solid #3d3d6e;
-    color: #d0d0ee;
-    padding: 14px 18px;
-    border-radius: 18px 18px 18px 4px;
-    margin: 8px 0;
-    max-width: 85%;
-    font-size: 0.95rem;
-    line-height: 1.6;
-}
-
-/* Section headers */
-.section-header {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #e0e0f0;
-    margin-bottom: 4px;
-}
-.section-sub {
-    font-size: 0.9rem;
-    color: #6666aa;
-    margin-bottom: 24px;
-}
-
-/* Upload area */
-.upload-box {
-    border: 2px dashed #3d3d6e;
-    border-radius: 16px;
-    padding: 40px;
-    text-align: center;
-    background: #12121f;
-}
-
-/* Anomaly badge */
-.anomaly-badge {
-    display: inline-block;
-    background: #ff4757;
-    color: white;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 0.75rem;
+.metric-title {
+    font-size: 13px;
     font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+.metric-value {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #000000;
+    line-height: 1.1;
 }
 
-/* Plotly chart background override */
-.js-plotly-plot { border-radius: 12px; overflow: hidden; }
+/* Dataframe & Plotly Overrides */
+[data-testid="stDataFrame"] { background: transparent !important; }
+[data-testid="stDataFrame"] > div {
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 12px !important;
+    background: #FFFFFF !important;
+}
+.js-plotly-plot {
+    border-radius: 16px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    padding: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+    transition: all 0.3s ease;
+}
+.js-plotly-plot:hover {
+    border-color: #00FF66;
+    box-shadow: 0 12px 30px rgba(0, 255, 102, 0.15);
+}
 
-/* Metric delta color */
-[data-testid="stMetricDelta"] { font-size: 0.8rem; }
+/* Inputs and Controls */
+.stTextInput > div > div > input, .stTextArea > div > div > textarea, .stChatInput > div {
+    background-color: #FFFFFF !important;
+    border: 2px solid #E2E8F0 !important;
+    color: #000000 !important;
+    border-radius: 10px !important;
+    padding: 14px 16px !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+}
+.stTextInput > div > div > input:focus, .stChatInput > div:focus-within {
+    border-color: #00FF66 !important;
+    box-shadow: 0 0 0 4px rgba(0, 255, 102, 0.2) !important;
+}
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0f0f1a; }
-::-webkit-scrollbar-thumb { background: #3d3d6e; border-radius: 3px; }
+/* Neon Green Buttons */
+.stButton > button[kind="primary"] {
+    background: #00FF66 !important;
+    color: #000000 !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 800 !important;
+    font-size: 15px !important;
+    padding: 12px 24px !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 14px rgba(0, 255, 102, 0.3) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(0, 255, 102, 0.5) !important;
+    background: #00E65C !important;
+}
+.stButton > button[kind="secondary"] {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    border: 2px solid #E2E8F0 !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    transition: all 0.2s ease !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    border-color: #00FF66 !important;
+    color: #000000 !important;
+    background: rgba(0, 255, 102, 0.05) !important;
+}
+
+/* Minimalist AI Chatbot */
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+.chat-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+.chat-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.chat-avatar.user { background: #F1F5F9; color: #000000; border: 1px solid #E2E8F0; }
+.chat-avatar.ai { background: #00FF66; color: #000000; box-shadow: 0 4px 10px rgba(0,255,102,0.3); }
+.chat-content {
+    flex-grow: 1;
+    color: #1E293B;
+    font-size: 16px;
+    line-height: 1.6;
+    padding-top: 6px;
+}
+
+/* High-Contrast Badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #000000;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.status-indicator.green { background: #00FF66; box-shadow: 0 0 12px #00FF66; }
+.status-indicator.red { background: #FF0044; box-shadow: 0 0 12px #FF0044; }
+
+/* Interactive Upload Area — Full Override */
+[data-testid="stFileUploader"] {
+    background: #FFFFFF !important;
+    border: 2px dashed #CBD5E1 !important;
+    border-radius: 16px !important;
+    padding: 32px !important;
+    transition: all 0.3s ease !important;
+}
+[data-testid="stFileUploader"]:hover {
+    border-color: #00FF66 !important;
+    background: rgba(0, 255, 102, 0.02) !important;
+    box-shadow: 0 10px 30px rgba(0, 255, 102, 0.1) !important;
+}
+/* Fix the dark inner drag section */
+[data-testid="stFileUploader"] > div {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+[data-testid="stFileUploader"] section {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+[data-testid="stFileUploaderDropzone"] {
+    background: transparent !important;
+    border: none !important;
+}
+/* Style the inner upload button to Neon Green */
+[data-testid="stFileUploaderDropzone"] button,
+[data-testid="stFileUploader"] button {
+    background: #00FF66 !important;
+    color: #000000 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    padding: 10px 20px !important;
+    box-shadow: 0 4px 12px rgba(0,255,102,0.3) !important;
+    transition: all 0.2s ease !important;
+}
+[data-testid="stFileUploaderDropzone"] button:hover,
+[data-testid="stFileUploader"] button:hover {
+    box-shadow: 0 6px 20px rgba(0,255,102,0.5) !important;
+    transform: translateY(-1px) !important;
+}
+/* Fix the text color inside uploader */
+[data-testid="stFileUploader"] p,
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] span {
+    color: #64748B !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Plotly dark template ───────────────────────────────────────────────────────
+# ── Neon Green & White Plotly Theme ───────────────────────────────────────────
 CHART_THEME = dict(
-    template="plotly_dark",
+    template="plotly_white",
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(family="Space Grotesk", color="#e0e0f0"),
-    margin=dict(l=20, r=20, t=40, b=20),
+    font=dict(family="Inter", color="#64748B", size=13),
+    margin=dict(l=10, r=10, t=30, b=10),
 )
-PURPLE = "#7c6af7"
-TEAL   = "#00d2c8"
-CORAL  = "#ff6b6b"
-AMBER  = "#ffd166"
-COLORS = [PURPLE, TEAL, CORAL, AMBER, "#06d6a0", "#ef476f", "#118ab2"]
-
+# Neon Green, Obsidian, Slate Colors
+COLORS = ["#00FF66", "#0F172A", "#334155", "#94A3B8", "#00E65C"]
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def fmt_currency(val):
@@ -163,11 +317,7 @@ def api_get(endpoint):
         r = requests.get(f"{API_URL}{endpoint}", timeout=30)
         r.raise_for_status()
         return r.json()
-    except requests.exceptions.ConnectionError:
-        st.error("⚠️ Backend not running. Start it with: `uvicorn main:app --reload`")
-        return None
-    except Exception as e:
-        st.error(f"API Error: {str(e)}")
+    except:
         return None
 
 def api_post(endpoint, data=None, files=None):
@@ -178,436 +328,405 @@ def api_post(endpoint, data=None, files=None):
             r = requests.post(f"{API_URL}{endpoint}", json=data, timeout=60)
         r.raise_for_status()
         return r.json()
-    except requests.exceptions.ConnectionError:
-        st.error("⚠️ Backend not running. Start it with: `uvicorn main:app --reload`")
-        return None
-    except Exception as e:
-        st.error(f"API Error: {str(e)}")
-        return None
-
-
-# ── Sidebar ────────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## 🧠 AI BI Analyst")
-    st.markdown("---")
-    page = st.radio(
-        "Navigation",
-        ["📁 Upload & Clean", "📊 Dashboard", "💬 AI Chat", "📈 Forecast", "🚨 Anomalies", "📄 Reports"],
-        label_visibility="collapsed",
-    )
-    st.markdown("---")
-    st.markdown("**Backend Status**")
-    try:
-        ping = requests.get(f"{API_URL}/", timeout=3)
-        if ping.status_code == 200:
-            st.success("🟢 Connected")
-        else:
-            st.error("🔴 Error")
     except:
-        st.error("🔴 Offline")
+        return None
 
-    st.markdown("---")
-    st.markdown(
-        "<div style='font-size:0.75rem;color:#555577;'>Powered by LangChain · Groq · FastAPI</div>",
-        unsafe_allow_html=True,
-    )
+def style_fig(fig):
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#F1F5F9', zeroline=False)
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#F1F5F9', zeroline=False)
+    return fig
+
+
+# ── Elegant Sidebar ────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:8px 4px;">
+            <div style="background:#000000; color:#00FF66; width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">⚡</div>
+            <div style="font-size:20px; font-weight:800; color:#000000; letter-spacing:-0.03em;">Clarity AI</div>
+        </div>
+        <div style="font-size:11px; font-weight:700; color:#94A3B8; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px; padding-left:8px;">Main Menu</div>
+    """, unsafe_allow_html=True)
+    
+    if HAS_OPTION_MENU:
+        page = option_menu(
+            menu_title=None,
+            options=["Data Upload", "Dashboard", "AI Copilot", "Forecast", "Anomalies", "Reports"],
+            icons=["cloud-upload", "grid", "chat-square", "graph-up", "shield-exclamation", "file-earmark-pdf"],
+            menu_icon="cast",
+            default_index=1,
+            styles={
+                "container": {
+                    "padding": "0!important", 
+                    "background-color": "#F8FAFC", # Match sidebar background explicitly
+                    "border": "none"
+                },
+                "icon": {
+                    "font-size": "16px", 
+                    "margin-right": "12px"
+                }, 
+                "nav-link": {
+                    "font-size": "15px", 
+                    "text-align": "left", 
+                    "margin": "4px 0", 
+                    "color": "#334155", 
+                    "font-weight": "600", 
+                    "border-radius": "10px", 
+                    "padding": "12px 14px", 
+                    "font-family": "system-ui, -apple-system, sans-serif", 
+                    "transition": "all 0.2s ease"
+                },
+                "nav-link-selected": {
+                    "background-color": "#00FF66", 
+                    "color": "#000000", 
+                    "font-weight": "800", 
+                    "box-shadow": "0 4px 12px rgba(0,255,102,0.2)"
+                },
+                "nav-link:hover": {
+                    "background-color": "rgba(0, 255, 102, 0.1)",
+                    "color": "#000000"
+                }
+            }
+        )
+    else:
+        page = st.radio("Navigation", ["Data Upload", "Dashboard", "AI Copilot", "Forecast", "Anomalies", "Reports"], label_visibility="collapsed")
+    
+    st.markdown("<div style='margin-top:auto;padding-top:60px;'></div>", unsafe_allow_html=True)
+    
+    # Premium Workspace / User Profile Widget
+    st.markdown("""
+        <div style="margin-bottom: 24px; padding: 12px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: #F1F5F9; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #000000; border: 1px solid #E2E8F0;">
+                JD
+            </div>
+            <div style="line-height: 1.2;">
+                <div style="font-size: 13px; font-weight: 700; color: #000000;">John Doe</div>
+                <div style="font-size: 11px; font-weight: 600; color: #64748B;">Admin Workspace</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    try:
+        ping = requests.get(f"{API_URL}/", timeout=2)
+        if ping.status_code == 200:
+            st.markdown('<div class="status-badge" style="width:100%; justify-content:center;"><div class="status-indicator green"></div> System Online</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="status-badge" style="width:100%; justify-content:center;"><div class="status-indicator red"></div> Offline</div>', unsafe_allow_html=True)
+    except:
+        st.markdown('<div class="status-badge" style="width:100%; justify-content:center;"><div class="status-indicator red"></div> Offline</div>', unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE 1 — Upload & Clean
+# PAGE 1 — Upload
 # ══════════════════════════════════════════════════════════════════════════════
-if page == "📁 Upload & Clean":
-    st.markdown('<div class="section-header">📁 Upload & Clean Data</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">Upload your CSV — the AI cleaning agent will auto-fix issues and load it into the database.</div>', unsafe_allow_html=True)
+if page == "Data Upload":
+    st.markdown('<div class="startup-title">Data Integration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="startup-subtitle">Upload and sanitize raw CSV files through the automated ML pipeline.</div>', unsafe_allow_html=True)
 
-    uploaded = st.file_uploader("Drop your CSV here", type=["csv"], label_visibility="collapsed")
+    # Premium upload dropzone header
+    st.markdown("""
+    <div style="
+        border: 2px dashed #CBD5E1;
+        border-radius: 16px;
+        padding: 40px 32px 20px;
+        background: #FFFFFF;
+        text-align: center;
+        margin-bottom: -20px;
+        transition: all 0.3s ease;
+    ">
+        <div style="font-size: 40px; margin-bottom: 12px;">☁️</div>
+        <div style="font-size: 17px; font-weight: 700; color: #0F172A; margin-bottom: 6px;">
+            Drop your CSV file here
+        </div>
+        <div style="font-size: 14px; color: #94A3B8; margin-bottom: 20px; font-weight: 500;">
+            Supports <b style="color:#64748B">CSV</b> files up to 200MB · Auto-cleansed &amp; validated
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    uploaded = st.file_uploader("", type=["csv"], label_visibility="collapsed")
 
     if uploaded:
-        with st.spinner("🤖 Running cleaning agent..."):
+        with st.spinner("Processing through neural pipeline..."):
             result = api_post("/upload", files={"file": (uploaded.name, uploaded.getvalue(), "text/csv")})
 
         if result:
             report = result.get("cleaning_report", {})
             db     = result.get("database", {})
 
-            # Summary row
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Rows Loaded", f"{db.get('rows', 0):,}")
-            col2.metric("Columns", len(db.get("columns", [])))
-            col3.metric("Issues Found", len(report.get("issues_found", [])))
-            col4.metric("Quality Score", f"{report.get('data_quality_score', 0)}%")
+            st.markdown(f'''
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 32px;">
+                <div class="premium-card">
+                    <div class="metric-title">Rows Ingested</div>
+                    <div class="metric-value">{db.get('rows', 0):,}</div>
+                </div>
+                <div class="premium-card">
+                    <div class="metric-title">Features</div>
+                    <div class="metric-value">{len(db.get("columns", []))}</div>
+                </div>
+                <div class="premium-card">
+                    <div class="metric-title">Anomalies Fixed</div>
+                    <div class="metric-value">{len(report.get("issues_found", []))}</div>
+                </div>
+                <div class="premium-card" style="border-color:#00FF66;">
+                    <div class="metric-title">Quality Score</div>
+                    <div class="metric-value" style="color:#00D859;">{report.get('data_quality_score', 0)}%</div>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
 
-            st.markdown("---")
-            c1, c2 = st.columns(2)
-
-            with c1:
-                st.markdown("**🔍 Issues Found**")
-                issues = report.get("issues_found", [])
-                if issues:
-                    for issue in issues:
-                        st.warning(f"⚠️ {issue}")
-                else:
-                    st.success("✅ No issues found!")
-
-            with c2:
-                st.markdown("**✅ Fixes Applied**")
-                fixes = report.get("fixes_applied", [])
-                if fixes:
-                    for fix in fixes:
-                        st.info(f"🔧 {fix}")
-
-            st.markdown("---")
-            st.markdown("**📋 Columns Detected**")
+            st.markdown("<div style='font-size:14px; color:#64748B; margin-bottom:8px; font-weight:600;'>Detected Schema</div>", unsafe_allow_html=True)
             cols = db.get("columns", [])
             st.code(", ".join(cols), language=None)
-
-            st.success(f"✅ Data loaded successfully into database — {db.get('rows', 0):,} rows ready for analysis!")
-
-    else:
-        st.markdown("""
-        <div class="upload-box">
-            <div style="font-size:3rem;margin-bottom:12px">📂</div>
-            <div style="font-size:1.1rem;color:#8888aa;">Drag and drop your CSV file here</div>
-            <div style="font-size:0.85rem;color:#555577;margin-top:8px;">Supports: sales data, customer data, retail data</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("---")
-        st.markdown("**💡 Recommended Dataset**")
-        st.info("Download **Sample Superstore** from Kaggle: `kaggle.com/datasets/vivek468/superstore-dataset-final`")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 2 — Dashboard
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "📊 Dashboard":
-    st.markdown('<div class="section-header">📊 Business Dashboard</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">Real-time KPIs and performance charts from your data.</div>', unsafe_allow_html=True)
+elif page == "Dashboard":
+    st.markdown('<div class="startup-title">Overview</div>', unsafe_allow_html=True)
+    st.markdown('<div class="startup-subtitle">Real-time telemetry and financial intelligence.</div>', unsafe_allow_html=True)
 
-    with st.spinner("Loading dashboard..."):
+    with st.spinner("Fetching live metrics..."):
         data = api_get("/dashboard")
 
     if data:
         kpis   = data.get("kpis", {})
         charts = data.get("charts", {})
 
-        # ── KPI Row ────────────────────────────────────────────────────────
-        k1, k2, k3, k4, k5 = st.columns(5)
-        k1.markdown(f'<div class="kpi-card"><div class="kpi-value">{fmt_currency(kpis.get("total_revenue",0))}</div><div class="kpi-label">Total Revenue</div></div>', unsafe_allow_html=True)
-        k2.markdown(f'<div class="kpi-card"><div class="kpi-value">{fmt_currency(kpis.get("total_profit",0))}</div><div class="kpi-label">Total Profit</div></div>', unsafe_allow_html=True)
-        k3.markdown(f'<div class="kpi-card"><div class="kpi-value">{kpis.get("profit_margin",0):.1f}%</div><div class="kpi-label">Profit Margin</div></div>', unsafe_allow_html=True)
-        k4.markdown(f'<div class="kpi-card"><div class="kpi-value">{kpis.get("total_orders",0):,}</div><div class="kpi-label">Total Orders</div></div>', unsafe_allow_html=True)
-        k5.markdown(f'<div class="kpi-card"><div class="kpi-value">{kpis.get("unique_customers",0):,}</div><div class="kpi-label">Customers</div></div>', unsafe_allow_html=True)
+        st.markdown(f'''
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 32px;">
+            <div class="premium-card">
+                <div class="metric-title">Gross Revenue</div>
+                <div class="metric-value">{fmt_currency(kpis.get("total_revenue",0))}</div>
+            </div>
+            <div class="premium-card">
+                <div class="metric-title">Net Profit</div>
+                <div class="metric-value">{fmt_currency(kpis.get("total_profit",0))}</div>
+            </div>
+            <div class="premium-card" style="border-color:#00FF66;">
+                <div class="metric-title">Margin</div>
+                <div class="metric-value" style="color:#00D859;">{kpis.get("profit_margin",0):.1f}%</div>
+            </div>
+            <div class="premium-card">
+                <div class="metric-title">Orders</div>
+                <div class="metric-value">{kpis.get("total_orders",0):,}</div>
+            </div>
+            <div class="premium-card">
+                <div class="metric-title">Active Users</div>
+                <div class="metric-value">{kpis.get("unique_customers",0):,}</div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ── Row 1: Monthly trend + Region ─────────────────────────────────
-        c1, c2 = st.columns([2, 1])
-
-        with c1:
-            monthly = charts.get("monthly_revenue", [])
-            if monthly:
-                df_m = pd.DataFrame(monthly)
-                fig = px.area(
-                    df_m, x="month", y="sales",
-                    title="Monthly Revenue Trend",
-                    color_discrete_sequence=[PURPLE],
-                )
-                fig.update_traces(fill="tozeroy", fillcolor="rgba(124,106,247,0.15)")
-                fig.update_layout(**CHART_THEME)
-                st.plotly_chart(fig, use_container_width=True)
-
+        monthly = charts.get("monthly_revenue", [])
+        if monthly:
+            df_m = pd.DataFrame(monthly)
+            fig = px.area(df_m, x="month", y="sales", title="Revenue Velocity", color_discrete_sequence=[COLORS[0]])
+            fig.update_traces(fill="tozeroy", fillcolor="rgba(0, 255, 102, 0.15)", line=dict(width=3, color="#00FF66"))
+            fig.update_layout(**CHART_THEME)
+            st.plotly_chart(style_fig(fig), use_container_width=True)
+        
+        c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
             region = charts.get("sales_by_region", [])
             if region:
                 df_r = pd.DataFrame(region)
+                total_sales = df_r["sales"].sum()
                 fig = px.pie(
-                    df_r, values="sales", names="region",
-                    title="Sales by Region",
-                    color_discrete_sequence=COLORS,
-                    hole=0.45,
+                    df_r, values="sales", names="region", 
+                    title="Market Share", 
+                    color_discrete_sequence=COLORS, 
+                    hole=0.8
                 )
-                fig.update_layout(**CHART_THEME)
-                st.plotly_chart(fig, use_container_width=True)
-
-        # ── Row 2: Top products + Category ────────────────────────────────
-        c3, c4 = st.columns([2, 1])
-
-        with c3:
-            products = charts.get("top_products", [])
-            if products:
-                df_p = pd.DataFrame(products).sort_values("sales")
-                fig = px.bar(
-                    df_p, x="sales", y="product_name",
-                    orientation="h",
-                    title="Top 10 Products by Revenue",
-                    color="sales",
-                    color_continuous_scale=[[0, "#2d2d6e"], [1, PURPLE]],
+                fig.update_traces(
+                    textposition='outside', 
+                    textinfo='percent+label',
+                    hovertemplate='<b>%{label}</b><br>%{value:$,.0f}<br>%{percent}',
+                    marker=dict(line=dict(color='#FFFFFF', width=3))
                 )
-                fig.update_layout(**CHART_THEME, showlegend=False, coloraxis_showscale=False)
-                st.plotly_chart(fig, use_container_width=True)
-
-        with c4:
-            cat = charts.get("sales_by_category", [])
-            if cat:
-                df_c = pd.DataFrame(cat)
-                fig = px.bar(
-                    df_c, x="category", y="sales",
-                    title="Sales by Category",
-                    color="category",
-                    color_discrete_sequence=COLORS,
+                fig.update_layout(
+                    **CHART_THEME,
+                    showlegend=False,
+                    annotations=[dict(
+                        text=f"Total<br><b style='color:#000000;font-size:24px;'>{fmt_currency(total_sales)}</b>", 
+                        x=0.5, y=0.5, showarrow=False, font=dict(size=14, color="#64748B")
+                    )]
                 )
-                fig.update_layout(**CHART_THEME, showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
-
-        # ── Segment breakdown ──────────────────────────────────────────────
-        seg = charts.get("sales_by_segment", [])
-        if seg:
-            df_s = pd.DataFrame(seg)
-            fig = px.bar(
-                df_s, x="segment", y="sales",
-                title="Revenue by Customer Segment",
-                color="segment",
-                color_discrete_sequence=COLORS,
-                text="sales",
-            )
-            fig.update_traces(texttemplate="$%{text:,.0f}", textposition="outside")
-            fig.update_layout(**CHART_THEME, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 3 — AI Chat
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "💬 AI Chat":
-    st.markdown('<div class="section-header">💬 Ask Your Data Anything</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">Natural language → SQL → Business insight. Powered by Groq LLM.</div>', unsafe_allow_html=True)
+elif page == "AI Copilot":
+    st.markdown('<div class="startup-title">AI Copilot</div>', unsafe_allow_html=True)
+    st.markdown('<div class="startup-subtitle">Interact with your data warehouse via advanced LLM synthesis.</div>', unsafe_allow_html=True)
 
-    # Example questions
-    st.markdown("**💡 Try these questions:**")
-    examples = [
-        "Why did revenue drop in Q3?",
-        "Which region has the highest profit margin?",
-        "Who are our top 5 customers by revenue?",
-        "Which product category is most profitable?",
-        "What is the average order value by segment?",
-    ]
-    cols = st.columns(len(examples))
-    for i, ex in enumerate(examples):
-        if cols[i].button(ex, key=f"ex_{i}", use_container_width=True):
-            st.session_state["prefill"] = ex
-
-    st.markdown("---")
-
-    # Chat history
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    # Display chat history
-    for msg in st.session_state.chat_history:
-        if msg["role"] == "user":
-            st.markdown(f'<div class="chat-user">🧑‍💼 {msg["content"]}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="chat-ai">🤖 {msg["content"]}</div>', unsafe_allow_html=True)
+    if not st.session_state.chat_history:
+        st.markdown("<div style='font-size:14px;color:#64748B;margin-bottom:12px;font-weight:700;text-transform:uppercase;'>Quick Actions</div>", unsafe_allow_html=True)
+        examples = ["Analyze Q3 revenue drop", "Show highest margin region", "Identify top 5 customers"]
+        cols = st.columns(len(examples))
+        for i, ex in enumerate(examples):
+            if cols[i].button(ex, key=f"ex_{i}", use_container_width=True, type="secondary"):
+                st.session_state["prefill"] = ex
 
-    # Input
+    if st.session_state.chat_history:
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+        for msg in st.session_state.chat_history:
+            if msg["role"] == "user":
+                st.markdown(f'''
+                <div class="chat-row">
+                    <div class="chat-avatar user">U</div>
+                    <div class="chat-content">{msg["content"]}</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            else:
+                st.markdown(f'''
+                <div class="chat-row">
+                    <div class="chat-avatar ai">⚡</div>
+                    <div class="chat-content">{msg["content"]}</div>
+                </div>
+                ''', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
     prefill = st.session_state.pop("prefill", "")
-    question = st.chat_input("Ask a business question...")
+    question = st.chat_input("Ask your Copilot...")
 
     if question or prefill:
         q = question or prefill
         st.session_state.chat_history.append({"role": "user", "content": q})
-        st.markdown(f'<div class="chat-user">🧑‍💼 {q}</div>', unsafe_allow_html=True)
+        st.rerun()
 
-        with st.spinner("🤖 Analyzing your data..."):
+    if st.session_state.chat_history and st.session_state.chat_history[-1]["role"] == "user":
+        q = st.session_state.chat_history[-1]["content"]
+        with st.spinner("Synthesizing..."):
             result = api_post("/query", data={"question": q})
 
         if result:
-            answer = result.get("answer", "No answer returned.")
+            answer = result.get("answer", "Analysis failed.")
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            st.markdown(f'<div class="chat-ai">🤖 {answer}</div>', unsafe_allow_html=True)
-
-    if st.session_state.chat_history:
-        if st.button("🗑️ Clear Chat"):
-            st.session_state.chat_history = []
             st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 4 — Forecast
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "📈 Forecast":
-    st.markdown('<div class="section-header">📈 Sales Forecasting</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">ML-powered revenue prediction using linear regression on historical sales.</div>', unsafe_allow_html=True)
+elif page == "Forecast":
+    st.markdown('<div class="startup-title">Predictive Engine</div>', unsafe_allow_html=True)
+    st.markdown('<div class="startup-subtitle">Algorithmic sales velocity projections based on historical data.</div>', unsafe_allow_html=True)
 
-    days = st.slider("Forecast horizon (days)", min_value=7, max_value=90, value=30, step=7)
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        days = st.slider("Projection Horizon (Days)", min_value=7, max_value=90, value=30, step=7)
+    with c2:
+        st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+        run_btn = st.button("Initialize Model", type="primary", use_container_width=True)
 
-    if st.button("🔮 Run Forecast", type="primary"):
-        with st.spinner("Running forecasting model..."):
+    if run_btn:
+        with st.spinner("Training predictive models..."):
             data = api_get(f"/forecast?days={days}")
 
         if data:
             summary = data.get("summary", {})
 
-            # Summary KPIs
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Avg Daily (Historical)", fmt_currency(summary.get("historical_avg_daily_sales", 0)))
-            c2.metric("Avg Daily (Forecast)", fmt_currency(summary.get("forecast_avg_daily_sales", 0)))
-            c3.metric(
-                "Growth",
-                f"{summary.get('growth_percent', 0):+.1f}%",
-                delta=f"{summary.get('growth_percent', 0):+.1f}%"
-            )
-            c4.metric("Total Forecast Revenue", fmt_currency(summary.get("total_forecast_revenue", 0)))
+            st.markdown(f'''
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 32px;">
+                <div class="premium-card">
+                    <div class="metric-title">Hist. Run Rate</div>
+                    <div class="metric-value">{fmt_currency(summary.get("historical_avg_daily_sales", 0))}</div>
+                </div>
+                <div class="premium-card" style="border-color:#00FF66;">
+                    <div class="metric-title">Proj. Run Rate</div>
+                    <div class="metric-value" style="color:#00D859;">{fmt_currency(summary.get("forecast_avg_daily_sales", 0))}</div>
+                </div>
+                <div class="premium-card">
+                    <div class="metric-title">Growth Delta</div>
+                    <div class="metric-value">{summary.get('growth_percent', 0):+.1f}%</div>
+                </div>
+                <div class="premium-card">
+                    <div class="metric-title">Target Pipeline</div>
+                    <div class="metric-value">{fmt_currency(summary.get("total_forecast_revenue", 0))}</div>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
 
-            st.markdown("---")
-
-            # Build chart
             historical = pd.DataFrame(data.get("historical", []))
             forecast   = pd.DataFrame(data.get("forecast", []))
 
             if not historical.empty and not forecast.empty:
                 fig = go.Figure()
-
-                fig.add_trace(go.Scatter(
-                    x=historical["date"], y=historical["sales"],
-                    name="Historical Sales",
-                    line=dict(color=PURPLE, width=2),
-                    mode="lines",
-                ))
-
-                fig.add_trace(go.Scatter(
-                    x=forecast["date"], y=forecast["sales"],
-                    name=f"{days}-Day Forecast",
-                    line=dict(color=TEAL, width=2, dash="dash"),
-                    mode="lines",
-                    fill="tozeroy",
-                    fillcolor="rgba(0,210,200,0.08)",
-                ))
-
-                fig.update_layout(
-                    **CHART_THEME,
-                    title=f"Sales Forecast — Next {days} Days",
-                    xaxis_title="Date",
-                    yaxis_title="Revenue ($)",
-                    hovermode="x unified",
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-                # Forecast table
-                st.markdown("**📋 Forecast Data**")
-                st.dataframe(
-                    forecast.rename(columns={"date": "Date", "sales": "Predicted Sales ($)"}),
-                    use_container_width=True,
-                    height=300,
-                )
-    else:
-        st.info("👆 Set your forecast horizon and click **Run Forecast**")
+                fig.add_trace(go.Scatter(x=historical["date"], y=historical["sales"], name="Actuals", line=dict(color="#64748B", width=2)))
+                fig.add_trace(go.Scatter(x=forecast["date"], y=forecast["sales"], name="Projection", line=dict(color="#00FF66", width=3), fill="tozeroy", fillcolor="rgba(0, 255, 102, 0.15)"))
+                fig.update_layout(**CHART_THEME, hovermode="x unified")
+                st.plotly_chart(style_fig(fig), use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 5 — Anomalies
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "🚨 Anomalies":
-    st.markdown('<div class="section-header">🚨 Anomaly Detection</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">IsolationForest ML model flags unusual orders — potential fraud, errors, or outliers.</div>', unsafe_allow_html=True)
+elif page == "Anomalies":
+    st.markdown('<div class="startup-title">Security & Fraud</div>', unsafe_allow_html=True)
+    st.markdown('<div class="startup-subtitle">Isolation Forest ML detecting outlier transactions.</div>', unsafe_allow_html=True)
 
-    if st.button("🔍 Detect Anomalies", type="primary"):
-        with st.spinner("Running IsolationForest model..."):
+    if st.button("Initiate Deep Scan", type="primary"):
+        with st.spinner("Scanning vectors..."):
             data = api_get("/anomalies")
 
         if data:
-            summary = data.get("summary", {})
-
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Records", f"{data.get('total_records', 0):,}")
-            c2.metric("Anomalies Found", f"{data.get('total_anomalies', 0):,}")
-            c3.metric("Anomaly Rate", f"{data.get('anomaly_rate_percent', 0):.1f}%")
-
-            st.markdown("---")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"**Avg Sales (Anomalies):** `${summary.get('avg_anomaly_sales', 0):,.2f}`")
-            with col2:
-                st.markdown(f"**Avg Sales (Normal):** `${summary.get('avg_normal_sales', 0):,.2f}`")
-
-            st.markdown("---")
-            st.markdown("**🚨 Flagged Records**")
-
+            st.markdown(f'''
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 32px;">
+                <div class="premium-card">
+                    <div class="metric-title">Vectors Scanned</div>
+                    <div class="metric-value">{data.get('total_records', 0):,}</div>
+                </div>
+                <div class="premium-card" style="border-color: #FF0044;">
+                    <div class="metric-title">Anomalies Detected</div>
+                    <div class="metric-value" style="color:#FF0044;">{data.get('total_anomalies', 0):,}</div>
+                </div>
+                <div class="premium-card">
+                    <div class="metric-title">Risk Rate</div>
+                    <div class="metric-value">{data.get('anomaly_rate_percent', 0):.1f}%</div>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+            
             anomalies = data.get("anomalies", [])
             if anomalies:
-                df_a = pd.DataFrame(anomalies)
-                st.dataframe(
-                    df_a,
-                    use_container_width=True,
-                    height=400,
-                )
-                st.warning(f"⚠️ {len(anomalies)} anomalous orders detected. Review these records manually.")
+                st.dataframe(pd.DataFrame(anomalies), use_container_width=True)
             else:
-                st.success("✅ No anomalies detected in your data!")
-    else:
-        st.info("👆 Click **Detect Anomalies** to run the ML model on your data")
+                st.success("System secure. No anomalies detected.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 6 — Reports
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "📄 Reports":
-    st.markdown('<div class="section-header">📄 Automated Reports</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">AI generates a full business report with KPIs and executive summary as a downloadable PDF.</div>', unsafe_allow_html=True)
+elif page == "Reports":
+    st.markdown('<div class="startup-title">Intelligence Exports</div>', unsafe_allow_html=True)
+    st.markdown('<div class="startup-subtitle">Generate investor-ready PDF briefs.</div>', unsafe_allow_html=True)
 
-    st.markdown("""
-    **What's included in the report:**
-    - ✅ AI-written executive summary (Groq LLM)
-    - ✅ All key KPIs (revenue, profit, margin, orders)
-    - ✅ Top region, category, and product
-    - ✅ Professional PDF formatting
-    """)
-
-    st.markdown("---")
-
-    if st.button("🤖 Generate AI Report", type="primary", use_container_width=True):
-        with st.spinner("🤖 AI is writing your report..."):
+    if st.button("Generate Brief", type="primary"):
+        with st.spinner("Synthesizing intelligence brief..."):
             result = api_post("/report/generate")
+            if result:
+                st.session_state["report_ready"] = result
 
-        if result:
-            st.success("✅ Report generated successfully!")
-
-            # Show AI summary
-            st.markdown("**📝 AI Executive Summary**")
-            st.info(result.get("ai_summary", "No summary available."))
-
-            # Show KPIs
-            kpis = result.get("kpis", {})
-            if kpis:
-                st.markdown("**📊 KPIs in Report**")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Revenue", fmt_currency(kpis.get("total_revenue", 0)))
-                c2.metric("Profit", fmt_currency(kpis.get("total_profit", 0)))
-                c3.metric("Margin", f"{kpis.get('profit_margin', 0):.1f}%")
-
-            st.markdown("---")
-
-            # Download button
-            try:
-                pdf_response = requests.get(f"{API_URL}/report/download", timeout=30)
-                if pdf_response.status_code == 200:
-                    st.download_button(
-                        label="📥 Download PDF Report",
-                        data=pdf_response.content,
-                        file_name=f"business_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        type="primary",
-                    )
-            except Exception as e:
-                st.error(f"Download error: {str(e)}")
-    else:
-        st.markdown("""
-        <div style="background:#12121f;border:1px dashed #3d3d6e;border-radius:16px;padding:40px;text-align:center;">
-            <div style="font-size:3rem;margin-bottom:12px">📊</div>
-            <div style="font-size:1.1rem;color:#8888aa;">Click the button above to generate your AI-powered report</div>
-            <div style="font-size:0.85rem;color:#555577;margin-top:8px;">Make sure data is uploaded first</div>
+    if "report_ready" in st.session_state:
+        result = st.session_state["report_ready"]
+        
+        st.markdown(f'''
+        <div class="premium-card" style="margin-top:24px;">
+            <div style="font-size:13px; color:#64748B; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px; font-weight:700;">Executive Summary</div>
+            <div style="font-size:16px; color:#0F172A; line-height:1.6;">{result.get("ai_summary", "")}</div>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        try:
+            pdf_response = requests.get(f"{API_URL}/report/download", timeout=30)
+            if pdf_response.status_code == 200:
+                st.download_button("Download PDF Document", pdf_response.content, "intelligence_brief.pdf", "application/pdf", type="primary", use_container_width=True)
+        except:
+            st.error("Download service unavailable.")

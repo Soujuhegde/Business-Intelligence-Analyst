@@ -41,17 +41,17 @@ def run_cleaning_agent(filepath: str) -> dict:
     for col, count in null_cols.items():
         report["issues_found"].append(f"'{col}' has {count} missing values")
         if df[col].dtype in [np.float64, np.int64]:
-            df[col].fillna(df[col].median(), inplace=True)
+            df[col] = df[col].fillna(df[col].median())
             report["fixes_applied"].append(f"Filled '{col}' nulls with median")
         else:
-            df[col].fillna("Unknown", inplace=True)
+            df[col] = df[col].fillna("Unknown")
             report["fixes_applied"].append(f"Filled '{col}' nulls with 'Unknown'")
 
     # ── 4. Duplicate rows ──────────────────────────────────────────────────
     dupes = df.duplicated().sum()
     if dupes > 0:
         report["issues_found"].append(f"{dupes} duplicate rows found")
-        df.drop_duplicates(inplace=True)
+        df = df.drop_duplicates()
         report["fixes_applied"].append(f"Removed {dupes} duplicate rows")
 
     # ── 5. Negative values in numeric columns ─────────────────────────────

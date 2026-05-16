@@ -46,12 +46,12 @@ def run_anomaly_agent(contamination: float = 0.05) -> dict:
         if candidate in df.columns:
             result_cols.append(candidate)
 
-    anomaly_records = anomalies[result_cols].head(20)
+    anomaly_records = anomalies[result_cols].head(20).copy()
 
     # Convert dates to string for JSON serialization
     for col in anomaly_records.columns:
         if "date" in col:
-            anomaly_records[col] = anomaly_records[col].astype(str)
+            anomaly_records.loc[:, col] = anomaly_records[col].astype(str)
 
     return {
         "total_anomalies": int(df["anomaly"].sum()),
